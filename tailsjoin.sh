@@ -1,185 +1,210 @@
 #!/bin/bash
-set -e
-clear
 
+tor_curl()
+{
+    curl -x https://127.0.0.1:9050 -# -L --retry 5 -L "${1}" -O "${2}"
+}
 
-# Check for root.
-if [[ $(id -u) = "0" ]]; then
-  echo "
-YOU SHOULD NOT RUN THIS SCRIPT AS ROOT!
-YOU WILL BE PROMPTED FOR THE ADMIN PASS WHEN NEEDED.
-"
-  read -p "PRESS ENTER TO EXIT SCRIPT, AND RUN AGAIN AS amnesia. "
-  exit 0
-fi
+set_global_vars()
+{
+    export mode_persistent=''
+    export mode_full=''
 
+    export jm_release=''
 
-# Make sure user has chosen the correct script.
-echo "
-          THIS SCRIPT WILL INSTALL JOINMARKET AND ITS DEPENDENCIES ON
-          A MINIMAL TAILS OS WITHOUT A LOCAL BLOCKCHAIN. YOU WILL BE
-       USING THE BLOCKR.IO API FOR BLOCKCHAIN LOOKUPS (ALWAYS OVER TOR).
-"
-read -p "PRESS ENTER TO CONTINUE. "
-clear
+    export libsodium_url='https://download.libsodium.org/libsodium/releases'
+    export libsodium_rel='libsodium-1.0.11'
+    export libsodium_key='54A2B8892CC3D6A597B92B6C210627AABA709FE1'
 
+    export libnacl_url='https://github.com/saltstack/libnacl/archive'
+    export libnacl_rel='v1.5.0'
 
-# Check for persistence.
-if  [[ $(pwd | grep -c Persistent) = "0" && -e /home/amnesia/Persistent ]]; then
-  echo "
-IT SEEMS YOU HAVE PERSISTENCE ENABLED, BUT YOU ARE IN THE FOLDER:
-"$PWD"
-IF YOU MOVE THE tailsjoin/ FOLDER TO /home/amnesia/Persistent/
-YOUR INSTALL WILL SURVIVE REBOOTS, OTHERWISE IT WILL NOT.
-"
-  read -p "QUIT THE SCRIPT NOW TO MOVE? (y/n) " q
-  if  [[ "$q" = "y" || "$q" = "Y" ]]; then
-    exit 0
-  else
+    export secp256k1_url=''
+    export secp256k1_rel=''
+}
+
+check_root()
+{
+    if [[ "$(id -u)" == '0' ]]; then
+
+        echo -e "\
+            YOU SHOULD NOT RUN THIS SCRIPT AS ROOT!\n \
+            YOU WILL BE PROMPTED FOR THE ADMIN PASS WHEN NEEDED."
+
+        read -p "PRESS ENTER TO EXIT SCRIPT, AND RUN AGAIN AS amnesia. "
+        exit 0
+    fi
+}
+
+check_setup_sanity()
+{
+    echo -e "\
+        THIS SCRIPT WILL INSTALL JOINMARKET AND ITS DEPENDENCIES ON\n \
+        A MINIMAL TAILS OS WITHOUT A LOCAL BLOCKCHAIN. YOU WILL BE\n \
+        USING THE BLOCKR.IO API FOR BLOCKCHAIN LOOKUPS (ALWAYS OVER TOR)."
+
+    read -p "PRESS ENTER TO CONTINUE "
     clear
-  fi
-fi
+}
 
+check_persitence()
+{
+    if [[ ! "${PWD}" =~ "Persistent" && -O "${HOME}/Persistent" ]]; then
 
-# Update apt-get sources.
-echo "
-ENTER PASSWORD TO UPDATE SOURCES.
-"
-sudo apt-get update
-clear
+        echo -e "\
+            IT SEEMS YOU HAVE PERSISTENCE ENABLED, BUT YOU ARE IN THE FOLDER:\n \
+            ${PWD} \n \
+            IF YOU MOVE THE tailsjoin/ FOLDER TO /home/amnesia/Persistent/ \n \
+            YOUR INSTALL WILL SURVIVE REBOOTS, OTHERWISE IT WILL NOT."
 
+        read -p "QUIT THE SCRIPT NOW TO MOVE? (y/n) " q
+        if [[ "${q}" =~ "Nn" ]]; then
 
-# Install dependencies for building libsodium.
-echo "
-ENTER PASSWORD TO INSTALL: 'gcc', 'libc6-dev', and 'make'
-(NEEDED TO BUILD LIBSODIUM CRYPTO LIBRARY)
-"
-sudo apt-get install -y gcc libc6-dev make
-clear
+            mode_persistent='0'
+            jm_home="${PWD}/../"
+            return
+        else
+            exit 0
+        fi
 
+        mode_persistent='1'
+        jm_home="${HOME}/Persistent/joinmarket/"
+        clear
+    fi
+}
 
-# Clone JoinMarket.
-git clone https://github.com/chris-belcher/joinmarket ../joinmarket
-clear
+install_libsodium_deps()
+{
+    echo -e "\
+        ENTER PASSWORD TO INSTALL: 'gcc', 'libc6-dev', and 'make'\n \
+        (NEEDED TO BUILD LIBSODIUM CRYPTO LIBRARY)"
 
+    sudo sh -c 'apt-get update && apt-get install -y gcc libc6-dev make python-pip'
 
-# Get libsodium, sig, and import key.
-echo "
-DOWNLOADING LIBSODIUM SOURCE AND SIGNING KEY...
-"
-gpg --recv-keys 54A2B8892CC3D6A597B92B6C210627AABA709FE1
-echo "54A2B8892CC3D6A597B92B6C210627AABA709FE1:6" | gpg --import-ownertrust -
-curl -x socks5://127.0.0.1:9050 -# -L -O http://download.libsodium.org/libsodium/releases/libsodium-1.0.4.tar.gz -O http://download.libsodium.org/libsodium/releases/libsodium-1.0.4.tar.gz.sig
-clear
+    check_libsodium_deps || echo "Dependencies not installed. Exiting" && exit 0
 
+    clear
+}
 
-# Verify download.
-echo "
-VERIFYING THE DOWNLOAD...
-"
-gpg --verify libsodium-1.0.4.tar.gz.sig libsodium-1.0.4.tar.gz
-echo "
-PLEASE REVIEW THE TEXT ABOVE.
-IT WILL EITHER SAY GOOD SIG OR BAD SIG.
-"
-read -p "IS IT A GOOD SIG? (y/n) " x
-while [[ "$x" = "n" || "$x" = "N" ]]; do
-  clear
-  echo "
-SECURELY DELETING FILES AND DOWNLOADING AGAIN...
-"
-  srm -drv libsodium*
-  curl -x socks5://127.0.0.1:9050 -# -L -O http://download.libsodium.org/libsodium/releases/libsodium-1.0.4.tar.gz -O http://download.libsodium.org/libsodium/releases/libsodium-1.0.4.tar.gz.sig
-  gpg --verify libsodium-1.0.4.tar.gz.sig libsodium-1.0.4.tar.gz
-  echo "
-PLEASE REVIEW THE TEXT ABOVE.
-IT WILL EITHER SAY GOOD SIG OR BAD SIG.
-"
-  read -p "IS IT A GOOD SIG? (y/n) " x
-done
-clear
+check_libsodium_deps()
+{
+    dpkg -V libc6-dev make gcc
+}
 
+get_joinmarket_git()
+{
+    echo -e "Cloning joinmarket into $(dirname ${PWD})/joinmarket"
+    git clone https://github.com/JoinMarket-Org/joinmarket.git ../joinmarket
+    if [[ ! -z "${jm_release}" ]]; then
 
-# Build and install libsodium.
-tar xf libsodium*.tar.gz
-rm -rf libsodium*.tar.gz*
+        echo "Checking out release ${jm_release}"
+        pushd ../joinmarket
+        git checkout "${jm_release}"
+        popd
+    fi
+    clear
+}
 
-if [[ $(pwd | grep -c Persistent) = "1" ]]; then
-  echo "
-BUILDING AND INSTALLING LIBSODIUM TO SURVIVE REBOOTS...
-"
-  mkdir ../joinmarket/libsodium
-  ( cd libsodium-1.0.4/ && ./configure --prefix=$(pwd) && make && make install )
-  mv libsodium-1.0.4/lib/libsodium.* ../joinmarket/libsodium/
-  sed -i "s|\/usr\/local\/lib|$(pwd | sed 's|tailsjoin|joinmarket\/libsodium|')|" ../joinmarket/libnacl/__init__.py
-  ( cd ../joinmarket && git commit -a -m "Tailsjoin survive reboots" )
-else
-  echo "
-BUILDING, LIBSODIUM...
-"
-  ( cd libsodium-1.0.4/ && ./configure && make )
-  echo "
-LIBSODIUM SUCCESSFULLY BULIT. ENTER PASSWORD TO INSTALL.
-"
-  ( cd libsodium-1.0.4/ && sudo make install )
-fi
-rm -rf libsodium*
-clear
+get_libnacl()
+{
+    tor_curl "${libnacl_url}/${libnacl_rel}.tar.gz" "${libnack_rel}.tar.gz"
+}
 
+extract_libnacl()
+{
+    tar xzvf "${libnacl_rel}.tar.gz"
+    rm "${libnacl_rel}.tar.gz"
+}
 
-# Set JoinMarket config for tor and blockr.
-echo "[BLOCKCHAIN]
-blockchain_source = blockr
-# blockchain_source options: blockr, bitcoin-rpc, json-rpc, regtest
-# for instructions on bitcoin-rpc read https://github.com/chris-belcher/joinmarket/wiki/Running-JoinMarket-with-Bitcoin-Core-full-node 
-network = mainnet
-rpc_host = localhost
-rpc_port = 8332
-rpc_user = bitcoin
-rpc_password = password
+install_libnacl()
+{
+    pushd "${libnacl_rel}"
+    sed -i "s|/usr/local/lib|${jm_home}/libsodium|" ./libnacl/__init.py && echo "sed -i on __init__.py @ install_libnacl good"
 
-[MESSAGING]
-#host = irc.cyberguerrilla.org
-channel = joinmarket-pit
-port = 6697
-usessl = true
-socks5 = false
-socks5_host = localhost
-socks5_port = 9050
-# for tor
-host = 6dvj6v5imhny3anf.onion
-# The host below is an alternative if the above isn't working.
-#host = a2jutl5hpza43yog.onion
-maker_timeout_sec = 60
+    mv ./libnacl "${jm_home}/"
+}
 
-[POLICY]
-# merge_algorithm options: greedy, default, gradual
-merge_algorithm = default" > ../joinmarket/joinmarket.cfg
+get_libsodium_keys()
+{
+    echo "Getting libsodium PGP keys"
+    gpg --recv-keys "${libsodium_key}"
+    echo "${libsodium_key}:6" | gpg --import-ownertrust -
+    clear
+}
 
+get_libsodium()
+{
+    echo "DOWNLOADING LIBSODIUM SOURCE AND SIGNING KEY..."
 
-# Final notes.
-echo "
-          JOINMARKET SUCCESSFULLY INSTALLED AND CONFIGURED!
+    tor_curl "${libsodium_url}/${libsodium_rel}.sig" "${libsodium_rel}.sig"
+    tor_curl "${libsodium_url}/${libsodium_rel}.tar.gz" "${libsodium_rel}.tar.gz"
 
-          IF YOU HAVE PERSISTENCE ENABLED, AND YOU RAN THIS
-       SCRIPT FROM WITHIN THE FOLDER: /home/amnesia/Persistent,
-         THEN YOUR INSTALL WILL SURVIVE REBOOTS AND YOU NEVER
-                   HAVE TO RUN THIS SCRIPT AGAIN.
+    clear
+}
 
+verify_libsodium()
+{
+    echo "VERIFYING THE DOWNLOAD..."
+    false || gpg --verify "${libsodium_rel}.sig" "${libsodium_rel}.tar.gz"
 
-SOME USEFUL LINKS:
+    if [[ "$?" != '0' ]]; then
 
-YOUR JOINMARKET FOLDER LOCATION:
-$(pwd | sed 's|tailsjoin|joinmarket|')
+        echo -e "BAD SIGNATURE.\n SECURELY DELETING FILES AND DOWNLOADING AGAIN..."
+        srm -drv "${libsodium_rel}" "${libsodium_rel}.sig"
+        get_libsodium
 
-DETAILED USE GUIDE FOR TAILS (WITH PICTURES):
-https://github.com/tailsjoin/tailsjoin/wiki/Detailed-Minimal-Setup-Guide
+        false || gpg --verify "${libsodium_rel}.sig" "${libsodium_rel}.tar.gz"
 
-HIDDEN SERVICE ORDERBOOK WATCHER:
-http://ruc47yiosooolrzw.onion
+        [[ "$?" != '0' ]] && echo "BAD SIGNATURE. ABORTING." && exit 1
 
-JOINMARKET PROJECT OFFICIAL GITHUB:
-https://github.com/chris-belcher/joinmarket
-"
-read -p "PRESS ENTER TO EXIT. "
-exit 0
+    fi
+
+    echo "VERIFY OK"
+    clear
+}
+
+extract_libsodium()
+{
+    tar xzvf "${libsodium_rel}"
+    rm "${libsodium_rel}.tar.gz" "${libsodium_rel}.sig"
+    clear
+}
+
+build_libsodium()
+{
+    local conf_opts
+
+    if (( "${mode_persistence}" )); then
+
+        conf_opts="--prefix=${PWD}/${libsodium_rel}"
+    fi
+
+    pushd "${libsodium_rel}"
+    ./configure "${conf_opts}"
+    make
+    popd
+}
+
+install_libsodium()
+{
+    if (( "${mode_persistence}" )); then
+
+        mkdir -p ../joinmarket/libsodium
+        cp "${libsodium_rel}/lib/libsodium.*" ../joinmarket/libsodium
+
+        pushd ../joinmarket
+        git commit -a -m "Tailsjoin survive reboots"
+        popd
+    else
+
+        pushd "${joinmarket_rel}"
+        sudo make install
+        popd
+    fi
+
+    rm -rf "${libsodium_rel}"
+    clear
+}
+
+set_global_vars
+
