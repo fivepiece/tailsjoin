@@ -10,14 +10,15 @@ tor_curl()
 
 set_global_vars()
 {
-    export mode_persistent=''
-    export mode_full=''
+    export mode_persistent=
+    export mode_full=
 
-    export jm_release='v0.2.1'
-    export jm_home=''
+    export jm_release="v0.2.1"
+    export jm_home=
 
-    export apt_deps_jessie='gcc libc6-dev make autoconf automake libtool pkg-config libffi-dev python-dev python-pip'
-    export apt_deps_testing='libsodium-dev'
+    export apt_deps_jessie="gcc libc6-dev make autoconf automake libtool pkg-config libffi-dev python-dev python-pip"
+    export apt_deps_testing="libsodium-dev"
+    export pip_deps="libnacl secp256k1"
 }
 
 
@@ -32,11 +33,11 @@ init_msgs()
 
 check_root()
 {
-    if [[ "$(id -u)" == '0' ]]; then
+    if [[ "$(id -u)" == "0" ]]; then
 
         echo -e "${msgs[no_run_root]}"
         read
-        exit 0
+        exit 1
     fi
 }
 
@@ -62,7 +63,7 @@ check_persitence()
             jm_home="${PWD}/../"
             return
         else
-            exit 0
+            exit 1
         fi
     fi
 
@@ -97,7 +98,7 @@ install_deps()
     if [[ ! check_deps ]]; then
 
        echo "Dependencies not installed. Exiting"
-       exit 0
+       exit 1
     fi
 
     clear
@@ -106,7 +107,7 @@ install_deps()
 
 check_deps()
 {
-    dpkg -V "${apt_deps_jessie} ${apt_deps_testing}" && pip show "${pip_deps}"
+    dpkg -V ${apt_deps_jessie} ${apt_deps_testing} && pip show ${pip_deps} 2>/dev/null
 }
 
 
@@ -146,6 +147,7 @@ ENDJMCFG
 
 main()
 {
+    clear
     set_global_vars
     init_msgs
     check_root
@@ -155,7 +157,9 @@ main()
     install_deps
     check_deps
     make_jm_cfg
+    clear
 }
 
 main
 echo "Joinmarket installed in: ${jm_home}"
+exit 0
