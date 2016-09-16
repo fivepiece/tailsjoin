@@ -2,7 +2,7 @@
 
 tor_curl()
 {
-    curl -x https://127.0.0.1:9050 -# -L --retry 5 -L "${1}" -O "${2}"
+    curl --socks5 https://127.0.0.1:9050 -# -L --retry 5 -L -O "${1}"
 }
 
 set_global_vars()
@@ -10,7 +10,8 @@ set_global_vars()
     export mode_persistent=''
     export mode_full=''
 
-    export jm_release=''
+    export jm_release='v0.2.1'
+    export jm_home=''
 
     export libsodium_url='https://download.libsodium.org/libsodium/releases'
     export libsodium_rel='libsodium-1.0.11'
@@ -60,17 +61,17 @@ check_persitence()
         read -p "QUIT THE SCRIPT NOW TO MOVE? (y/n) " q
         if [[ "${q}" =~ "Nn" ]]; then
 
-            mode_persistent='0'
-            jm_home="${PWD}/../"
+            export mode_persistent='0'
+            export jm_home="${PWD}/../"
             return
         else
             exit 0
         fi
-
-        mode_persistent='1'
-        jm_home="${HOME}/Persistent/joinmarket/"
-        clear
     fi
+
+    mode_persistent='1'
+    export jm_home="${HOME}/Persistent/joinmarket/"
+    clear
 }
 
 install_libsodium_deps()
@@ -80,8 +81,12 @@ install_libsodium_deps()
         (NEEDED TO BUILD LIBSODIUM CRYPTO LIBRARY)"
 
     sudo sh -c 'apt-get update && apt-get install -y gcc libc6-dev make python-pip'
+    
+    if [[ ! check_libsodium_deps ]]; then
 
-    check_libsodium_deps || echo "Dependencies not installed. Exiting" && exit 0
+       echo "Dependencies not installed. Exiting"
+       exit 0
+    fi
 
     clear
 }
@@ -107,7 +112,7 @@ get_joinmarket_git()
 
 get_libnacl()
 {
-    tor_curl "${libnacl_url}/${libnacl_rel}.tar.gz" "${libnack_rel}.tar.gz"
+    tor_curl "${libnacl_url}/${libnacl_rel}.tar.gz"
 }
 
 extract_libnacl()
@@ -136,8 +141,8 @@ get_libsodium()
 {
     echo "DOWNLOADING LIBSODIUM SOURCE AND SIGNING KEY..."
 
-    tor_curl "${libsodium_url}/${libsodium_rel}.sig" "${libsodium_rel}.sig"
-    tor_curl "${libsodium_url}/${libsodium_rel}.tar.gz" "${libsodium_rel}.tar.gz"
+    tor_curl "${libsodium_url}/${libsodium_rel}.sig"
+    tor_curl "${libsodium_url}/${libsodium_rel}.tar.gz"
 
     clear
 }
