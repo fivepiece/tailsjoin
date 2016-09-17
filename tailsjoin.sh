@@ -110,7 +110,7 @@ check_persitence()
     else
 
         echo -e "${msgs[persist_mode_off]}"
-        read -p "Continue installing Joinmarket in NON-persistence mode? (y/n) "
+        read -p "Continue installing Joinmarket in NON-persistence mode? (y/n) " q
 
         if [[ "${q}" =~ [Yy] ]]; then
 
