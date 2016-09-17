@@ -37,7 +37,7 @@ init_msgs()
     msgs[script_goal_full]="\nThis script will install Joinmarket and its dependencies on a minimal tails OS with a local blockchain.\nThis requires both persistence and at least 90GB of free space\n\n"
     msgs[script_goal_fail]="\nFull node setup not supported without persistence.\nCreate a persistent volume with at least 90GB of free space and restart tailsjoin.sh"
     msgs[persist_on_wrong_dir]="\nIT SEEMS YOU HAVE PERSISTENCE ENABLED, BUT YOU ARE IN THE FOLDER:\n\n${PWD}\n\nIF YOU MOVE THE tailsjoin/ FOLDER TO /home/amnesia/Persistent/\nYOUR INSTALL WILL SURVIVE REBOOTS, OTHERWISE IT WILL NOT.\n\nQUIT THE SCRIPT NOW TO MOVE? (y/n) "
-    msgs[warn_apt_install]="\nInstalling dependencies:\n\n${apt_deps_jessie} ${apt_deps_testing} ${pip_deps}\n\nYou will be asked to input a password for sudo."
+    msgs[warn_apt_install]="\nInstalling dependencies:\n\napt : ${apt_deps_jessie} ${apt_deps_testing}\npip : ${pip_deps}\n\nYou will be asked to input a password for sudo."
 }
 
 
@@ -84,7 +84,7 @@ check_persitence()
         if [[ "${q}" =~ [Nn] ]]; then
 
             mode_persistent='0'
-            jm_home="${PWD}/../"
+            jm_home="${PWD}/joinmarket/"
             return
         else
             exit 1
@@ -178,12 +178,14 @@ ENDCORECFG
 
 install_deps()
 {
+    check_deps && return
+
     echo -e "${msgs[warn_apt_install]}"
 
     sudo sh -c "apt-get update && apt-get install -y ${apt_deps_jessie} && apt-get install -y -t testing ${apt_deps_testing}; \
                 torify pip install -r ${jm_home}/requirements.txt && chmod -R ugo+rX /usr/local/lib/python2.7/dist-packages/"
     
-    if [[ ! check_deps ]]; then
+    if ! check_deps; then
 
        echo -e "\nDependencies not installed. Exiting"
        exit 1
@@ -195,7 +197,20 @@ install_deps()
 
 check_deps()
 {
-    dpkg -V ${apt_deps_jessie} ${apt_deps_testing} 2>/dev/null && pip show ${pip_deps} 2>/dev/null
+    if (( "$(apt-cache policy ${apt_deps_jessie} ${apt_deps_testing} | grep -c 'Installed: (none)')" )); then
+
+        return 1
+    fi
+
+    for pylib in ${pip_deps}; do
+
+        if ! python -c "import ${pylib}"; then
+
+            return 1
+        fi
+    done
+
+    return 0
 }
 
 
