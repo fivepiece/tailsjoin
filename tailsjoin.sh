@@ -37,6 +37,8 @@ init_msgs()
     msgs[script_goal_full]="\nThis script will install Joinmarket and its dependencies on a minimal tails OS with a local blockchain.\nThis requires both persistence and at least 90GB of free space\n\n"
     msgs[script_goal_fail]="\nFull node setup not supported without persistence.\nCreate a persistent volume with at least 90GB of free space and restart tailsjoin.sh"
     msgs[persist_on_wrong_dir]="\nIT SEEMS YOU HAVE PERSISTENCE ENABLED, BUT YOU ARE IN THE FOLDER:\n\n${PWD}\n\nIF YOU MOVE THE tailsjoin/ FOLDER TO /home/amnesia/Persistent/\nYOUR INSTALL WILL SURVIVE REBOOTS, OTHERWISE IT WILL NOT.\n\nQUIT THE SCRIPT NOW TO MOVE? (y/n) "
+    msgs[persist_mode_on]="\nPersistence is enabled and working directory is in persistent volume.\n"
+    msgs[persist_mode_off]="\nPERSISTENCE IS DISABLED!\nABSOLUTELY NO DATA WILL SURVIVE A REBOOT.\n\n"
     msgs[warn_apt_install]="\nInstalling dependencies:\n\napt : ${apt_deps_jessie} ${apt_deps_testing}\npip : ${pip_deps}\n\nYou will be asked to input a password for sudo."
 }
 
@@ -76,23 +78,50 @@ check_setup_sanity()
 
 check_persitence()
 {
-    if [[ ! "${PWD}" =~ "Persistent" && -O "${HOME}/Persistent" ]]; then
 
-        echo -e "${msgs[persist_on_wrong_dir]}"
-        read q
+    if [[ -O "${HOME}/Persistent" ]]; then
 
-        if [[ "${q}" =~ [Nn] ]]; then
+        if [[ ! "${PWD}" =~ "Persistent" ]]; then
 
-            mode_persistent='0'
-            jm_home="${PWD}/joinmarket/"
-            return
+            echo -e "${msgs[persist_on_wrong_dir]}"
+            read -p "Quit the script now to move? (y/n) " q
+
+            if [[ "${q}" =~ [Nn] ]]; then
+
+                mode_persistent="0"
+                jm_home="${PWD}/joinmarket/"
+                return
+            else
+
+                exit 1
+            fi
         else
+
+            echo -e "${msgs[persist_mode_on]}"
+            read -p "Continue installing Joinmarket in persistence mode? (y/n)" q
+
+            if [[ "${q}" =~ [Yy] ]]; then
+
+                mode_persistent='1'
+                jm_home="${HOME}/Persistent/joinmarket/"
+                return
+            fi
+        fi
+    else
+
+        echo -e "${msgs[persist_mode_off]}"
+        read -p "Continue installing Joinmarket in NON-persistence mode? (y/n) "
+
+        if [[ "${q}" =~ [Yy] ]]; then
+
+            mode_persistent="0"
+            jm_home="${PWD}/../joinmarket/"
+        else
+
             exit 1
         fi
     fi
 
-    mode_persistent='1'
-    jm_home="${HOME}/Persistent/joinmarket/"
     clear
 }
 
