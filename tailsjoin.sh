@@ -280,6 +280,8 @@ ENDJMCFG
 
 main()
 {
+    set_global_vars "${1}"
+    init_msgs
     if [[ "${1}" =~ -[-h] ]]; then
 
         echo -e "${msgs[help_msg]}"
@@ -287,8 +289,6 @@ main()
     fi
 
     clear
-    set_global_vars "${1}"
-    init_msgs
     check_root
     check_setup_sanity
     check_persitence
