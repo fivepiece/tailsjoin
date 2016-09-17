@@ -213,11 +213,11 @@ install_deps()
         echo -e "${msgs[warn_iptables]}"
     fi
 
-    check_deps && return
+    check_deps 2>/dev/null && return
 
     echo -e "${msgs[warn_apt_install]}"
 
-    sudo sh -c "apt-get update && apt-get install -y ${apt_deps_jessie} && apt-get install -y -t testing ${apt_deps_testing}; \
+    sudo bash -c "apt-get update && apt-get install -y ${apt_deps_jessie} && apt-get install -y -t testing ${apt_deps_testing}; \
                 if [[ $? == 0 ]]; then \
                     torify pip install -r ${jm_home}/requirements.txt && chmod -R ugo+rX /usr/local/lib/python2.7/dist-packages/; \
                 fi; \
@@ -228,7 +228,7 @@ install_deps()
                     echo '\n\nFAILED TO APPLY IPTABLES RULE FOR BITCOIND RPC\nSetup will continue, but full node functionality\n with Joinmarket will not work.'; \
                 fi;"
     
-    if ! check_deps; then
+    if ! check_deps 2>/dev/null; then
 
        echo -e "\nDependencies not installed. Exiting"
        exit 1
