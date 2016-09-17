@@ -63,7 +63,7 @@ check_setup_sanity()
     fi
 
     read -p "Press enter to continue or 'q' to exit. " q
-    [[ "${q}" =~ "Qq" ]] && exit 0
+    [[ "${q}" =~ [Qq] ]] && exit 0
 
     if [[ "${mode_full}" == "fullnode" && ! -O "${HOME}/Persistent" ]]; then
 
@@ -81,7 +81,7 @@ check_persitence()
         echo -e "${msgs[persist_on_wrong_dir]}"
         read q
 
-        if [[ "${q}" =~ "Nn" ]]; then
+        if [[ "${q}" =~ [Nn] ]]; then
 
             mode_persistent='0'
             jm_home="${PWD}/../"
@@ -133,7 +133,7 @@ get_core_bitcoinorg()
 
         read -p "Retry? (y/n)" q
 
-        if [[ "${q}" =~ "Nn" ]]; then
+        if [[ "${q}" =~ [Nn] ]]; then
 
             echo -e "\nExiting." && exit 1
         else
@@ -154,7 +154,7 @@ make_core_cfg()
         echo -e "\nFile bitcoin.conf found in ${core_home}/bin/."
         read -p "Overwrite? (y/n) " q
 
-        [[ "${q}" =~ "Nn" ]] && return
+        [[ "${q}" =~ [Nn] ]] && return
     fi
 
 # initentionally not indented
@@ -236,7 +236,7 @@ ENDJMCFG
 
 main()
 {
-    if [[ "${1}" =~ "help" ]]; then
+    if [[ "${1}" =~ -[-h] ]]; then
 
         echo -e "${msgs[help_msg]}"
         exit 0
