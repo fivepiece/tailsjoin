@@ -204,6 +204,8 @@ alertnotify=curl -sI --connect-timeout 1 http://127.0.0.1:62602/alertnotify?%s
 # Uncomment and fill in a persistent full path for the blockchain datadir
 #datadir=${core_home}/data
 ENDCORECFG
+
+    mkdir -p "${core_home}/data"
 }
 
 install_deps()
