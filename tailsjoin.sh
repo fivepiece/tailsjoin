@@ -11,7 +11,7 @@ tor_curl()
 set_global_vars()
 {
     export mode_persistent=
-    export mode_full=
+    export mode_full="${1}"
 
     export jm_release="v0.2.1"
     export jm_home=
@@ -19,15 +19,22 @@ set_global_vars()
     export apt_deps_jessie="gcc libc6-dev make autoconf automake libtool pkg-config libffi-dev python-dev python-pip"
     export apt_deps_testing="libsodium-dev"
     export pip_deps="libnacl secp256k1"
+
+    export core_url="https://bitcoin.org/bin/bitcoin-core-0.13.0/bitcoin-0.13.0-i686-pc-linux-gnu.tar.gz"
+    export core_sig="https://bitcoin.org/bin/bitcoin-core-0.13.0/SHA256SUMS.asc"
+    export core_key="01EA5486DE18A882D4C2684590C8019E36C2E964"
+    export core_sigfile="SHA256SUMS.asc"
+    export core_tarfile="bitcoin-0.13.0-i686-pc-linux-gnu.tar.gz"
+    export core_home=
 }
 
 
 init_msgs()
 {
-    msgs[no_run_root]="\n\tYOU SHOULD NOT RUN THIS SCRIPT AS ROOT!\n\tYOU WILL BE PROMPTED FOR THE ADMIN PASS WHEN NEEDED.\n\tPRESS ENTER TO EXIT SCRIPT, AND RUN AGAIN AS amnesia."
-    msgs[script_goal_minimal]="\n\tThis script will install Joinmarket and its dependencies on a minimal tails OS without a local blockchain.\n\tYou will be using the blockr.io api for blockchain lookups (always over tor).\n\n\tPress enter to continue"
-    msgs[persist_on_wrong_dir]="\n\tIT SEEMS YOU HAVE PERSISTENCE ENABLED, BUT YOU ARE IN THE FOLDER:\n\n${PWD}\n\n\tIF YOU MOVE THE tailsjoin/ FOLDER TO /home/amnesia/Persistent/\n\tYOUR INSTALL WILL SURVIVE REBOOTS, OTHERWISE IT WILL NOT.\n\n\tQUIT THE SCRIPT NOW TO MOVE? (y/n) "
-    msgs[warn_apt_install]="\n\tInstalling dependencies:\n\n${apt_deps_jessie} ${apt_deps_testing} ${pip_deps}\n\n\tYou will be asked to input a password for sudo."
+    msgs[no_run_root]="\nYOU SHOULD NOT RUN THIS SCRIPT AS ROOT!\nYOU WILL BE PROMPTED FOR THE ADMIN PASS WHEN NEEDED.\nPRESS ENTER TO EXIT SCRIPT, AND RUN AGAIN AS amnesia."
+    msgs[script_goal_minimal]="\nThis script will install Joinmarket and its dependencies on a minimal tails OS without a local blockchain.\nYou will be using the blockr.io api for blockchain lookups (always over tor).\n\nPress enter to continue"
+    msgs[persist_on_wrong_dir]="\nIT SEEMS YOU HAVE PERSISTENCE ENABLED, BUT YOU ARE IN THE FOLDER:\n\n${PWD}\n\nIF YOU MOVE THE tailsjoin/ FOLDER TO /home/amnesia/Persistent/\nYOUR INSTALL WILL SURVIVE REBOOTS, OTHERWISE IT WILL NOT.\n\nQUIT THE SCRIPT NOW TO MOVE? (y/n) "
+    msgs[warn_apt_install]="\nInstalling dependencies:\n\n${apt_deps_jessie} ${apt_deps_testing} ${pip_deps}\n\nYou will be asked to input a password for sudo."
 }
 
 
@@ -75,11 +82,11 @@ check_persitence()
 
 get_joinmarket_git()
 {
-    echo -e "Cloning joinmarket into ${jm_home}"
+    echo -e "\nCloning joinmarket into ${jm_home}"
     git clone https://github.com/JoinMarket-Org/joinmarket.git "${jm_home}"
     if [[ ! -z "${jm_release}" ]]; then
 
-        echo "Checking out release ${jm_release}"
+        echo -e "\nChecking out release ${jm_release}"
         pushd "${jm_home}"
         git checkout "${jm_release}"
         popd
@@ -87,6 +94,68 @@ get_joinmarket_git()
     clear
 }
 
+
+get_core_bitcoinorg()
+{
+    pushd "${HOME}/persistent"
+    echo -e "\nDownloading bitcoin and verifying Bitcoin Core"
+
+    gpg --recv-keys "${core_key}"
+    echo "${core_key}:6" | gpg --import-ownertrust -
+
+    tor_curl "${core_url}"
+    tor_curl "${core_sig}"
+
+    gpg --verify "${core_sigfile}"
+
+    if [[ "$?" != "0" ]]; then
+
+        echo -e "\nSIGNATURE VERIFICATION FAILED !"
+        rm -rf "${core_tarfile}" "${core_sigfile}"
+        clear
+
+        read -p "Retry? (y/n)" q
+
+        if [[ "${q}" =~ "Nn" ]]; then
+
+            echo -e "\nExiting." && exit 1
+        else
+            get_core_bitcoinorg
+        fi
+    fi
+
+    tar xzvf "${bitcoin_tarfile}"
+    core_home="${PWD}/${bitcoin_tarfile/-i686-pc-linux-gnu.tar.gz/}"
+    popd
+}
+
+
+make_core_cfg()
+{
+    if [[ -e "${core_home}/bin/bitcoin.conf" ]]; then
+
+        echo -e "\nFile bitcoin.conf found in ${core_home}/bin/."
+        read -p "Overwrite? (y/n) " q
+
+        [[ "${q}" =~ "Nn" ]] && return
+
+    cat << ENDCORECFG > "${core_home}/bin/bitcoin.conf"
+rpcuser="$(pwgen -ncsB 35 1)"
+rpcpassword="$(pwgen -ncsB 75 1)"
+daemon=1
+proxyrandomize=1
+proxy=127.0.0.1:9050
+listen=0
+server=1
+
+# For JoinMarket
+walletnotify=curl -sI --connect-timeout 1 http://127.0.0.1:62602/walletnotify?%s
+alertnotify=curl -sI --connect-timeout 1 http://127.0.0.1:62602/alertnotify?%s
+
+# Uncomment and fill in a persistent full path for the blockchain datadir
+#datadir="${core_home}/data"
+ENDCORECFG
+}
 
 install_deps()
 {
@@ -97,7 +166,7 @@ install_deps()
     
     if [[ ! check_deps ]]; then
 
-       echo "Dependencies not installed. Exiting"
+       echo -e "\nDependencies not installed. Exiting"
        exit 1
     fi
 
@@ -107,13 +176,13 @@ install_deps()
 
 check_deps()
 {
-    dpkg -V ${apt_deps_jessie} ${apt_deps_testing} && pip show ${pip_deps} 2>/dev/null
+    dpkg -V ${apt_deps_jessie} ${apt_deps_testing} 2>/dev/null && pip show ${pip_deps} 2>/dev/null
 }
 
 
 make_jm_cfg() # initentionally not indented
 {
-cat << ENDJMCFG > "${jm_home}/joinmarket.cfg"
+    cat << ENDJMCFG > "${jm_home}/joinmarket.cfg"
 # Set JoinMarket config for tor and blockr. 
 echo "[BLOCKCHAIN]
 blockchain_source = blockr
@@ -148,7 +217,7 @@ ENDJMCFG
 main()
 {
     clear
-    set_global_vars
+    set_global_vars "${1}"
     init_msgs
     check_root
     check_setup_sanity
@@ -157,9 +226,14 @@ main()
     install_deps
     check_deps
     make_jm_cfg
+    if [[ "${mode_full}" == "fullnode" ]]; then
+        get_core_bitcoinorg
+        make_core_cfg
+    fi
     clear
 }
 
-main
-echo "Joinmarket installed in: ${jm_home}"
+main "${1}"
+echo "\nJoinmarket installed in: ${jm_home}"
+cd "${jm_home}"
 exit 0
