@@ -31,8 +31,11 @@ set_global_vars()
 
 init_msgs()
 {
+    msgs[help_msg]="\ntailsjoin.sh - Install Joinmarket on TAILS OS >v2.3\n\n./tailsjoin.sh            -   Installs Joinmarket\n./tailsjoin.sh fullnode   -   Installs Joinmarket and gets Bitcoin Core (Persistence and ~90GB of free space required)"
     msgs[no_run_root]="\nYOU SHOULD NOT RUN THIS SCRIPT AS ROOT!\nYOU WILL BE PROMPTED FOR THE ADMIN PASS WHEN NEEDED.\nPRESS ENTER TO EXIT SCRIPT, AND RUN AGAIN AS amnesia."
-    msgs[script_goal_minimal]="\nThis script will install Joinmarket and its dependencies on a minimal tails OS without a local blockchain.\nYou will be using the blockr.io api for blockchain lookups (always over tor).\n\nPress enter to continue"
+    msgs[script_goal_minimal]="\nThis script will install Joinmarket and its dependencies on a minimal tails OS without a local blockchain.\nYou will be using the blockr.io api for blockchain lookups (always over tor).\n\n"
+    msgs[script_goal_full]="\nThis script will install Joinmarket and its dependencies on a minimal tails OS with a local blockchain.\nThis requires both persistence and at least 90GB of free space\n\n"
+    msgs[script_goal_fail]="\nFull node setup not supported without persistence.\nCreate a persistent volume with at least 90GB of free space and restart tailsjoin.sh"
     msgs[persist_on_wrong_dir]="\nIT SEEMS YOU HAVE PERSISTENCE ENABLED, BUT YOU ARE IN THE FOLDER:\n\n${PWD}\n\nIF YOU MOVE THE tailsjoin/ FOLDER TO /home/amnesia/Persistent/\nYOUR INSTALL WILL SURVIVE REBOOTS, OTHERWISE IT WILL NOT.\n\nQUIT THE SCRIPT NOW TO MOVE? (y/n) "
     msgs[warn_apt_install]="\nInstalling dependencies:\n\n${apt_deps_jessie} ${apt_deps_testing} ${pip_deps}\n\nYou will be asked to input a password for sudo."
 }
@@ -51,8 +54,22 @@ check_root()
 
 check_setup_sanity()
 {
-    echo -e "${msgs[script_goal_minimal]}"
-    read
+    if [[ "${mode_full}" == "fullnode" ]]; then
+
+        echo -e "${msgs[script_goal_full]}"
+    else
+
+        echo -e "${msgs[script_goal_minimal]}"
+    fi
+
+    read -p "Press enter to continue or 'q' to exit. " q
+    [[ "${q}" =~ "Qq" ]] && exit 0
+
+    if [[ "${mode_full}" == "fullnode" && ! -O "${HOME}/Persistent" ]]; then
+
+        echo -e "${msgs[script_goal_fail]}"
+        exit 1
+    fi
     clear
 }
 
@@ -97,8 +114,8 @@ get_joinmarket_git()
 
 get_core_bitcoinorg()
 {
-    pushd "${HOME}/persistent"
-    echo -e "\nDownloading bitcoin and verifying Bitcoin Core"
+    pushd "${HOME}/Persistent"
+    echo -e "\nDownloading and verifying Bitcoin Core"
 
     gpg --recv-keys "${core_key}"
     echo "${core_key}:6" | gpg --import-ownertrust -
@@ -124,8 +141,8 @@ get_core_bitcoinorg()
         fi
     fi
 
-    tar xzvf "${bitcoin_tarfile}"
-    core_home="${PWD}/${bitcoin_tarfile/-i686-pc-linux-gnu.tar.gz/}"
+    tar xzvf "${core_tarfile}"
+    core_home="${PWD}/${core_tarfile/-i686-pc-linux-gnu.tar.gz/}"
     popd
 }
 
@@ -138,7 +155,9 @@ make_core_cfg()
         read -p "Overwrite? (y/n) " q
 
         [[ "${q}" =~ "Nn" ]] && return
+    fi
 
+# initentionally not indented
     cat << ENDCORECFG > "${core_home}/bin/bitcoin.conf"
 rpcuser="$(pwgen -ncsB 35 1)"
 rpcpassword="$(pwgen -ncsB 75 1)"
@@ -180,11 +199,12 @@ check_deps()
 }
 
 
-make_jm_cfg() # initentionally not indented
+# initentionally not indented
+make_jm_cfg()
 {
     cat << ENDJMCFG > "${jm_home}/joinmarket.cfg"
 # Set JoinMarket config for tor and blockr. 
-echo "[BLOCKCHAIN]
+[BLOCKCHAIN]
 blockchain_source = blockr
 # blockchain_source options: blockr, bitcoin-rpc, json-rpc, regtest 
 # for instructions on bitcoin-rpc read https://github.com/chris-belcher/joinmarket/wiki/Running-JoinMarket-with-Bitcoin-Core-full-node
@@ -216,6 +236,12 @@ ENDJMCFG
 
 main()
 {
+    if [[ "${1}" =~ "help" ]]; then
+
+        echo -e "${msgs[help_msg]}"
+        exit 0
+    fi
+
     clear
     set_global_vars "${1}"
     init_msgs
@@ -234,6 +260,6 @@ main()
 }
 
 main "${1}"
-echo "\nJoinmarket installed in: ${jm_home}"
+echo -e "\nJoinmarket installed in: ${jm_home}"
 cd "${jm_home}"
 exit 0
