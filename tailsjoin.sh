@@ -39,7 +39,8 @@ init_msgs()
     msgs[persist_on_wrong_dir]="\nIT SEEMS YOU HAVE PERSISTENCE ENABLED, BUT YOU ARE IN THE FOLDER:\n\n${PWD}\n\nIF YOU MOVE THE tailsjoin/ FOLDER TO /home/amnesia/Persistent/\nYOUR INSTALL WILL SURVIVE REBOOTS, OTHERWISE IT WILL NOT.\n\n"
     msgs[persist_mode_on]="\nPersistence is enabled and working directory is in persistent volume.\n"
     msgs[persist_mode_off]="\nPERSISTENCE IS DISABLED!\nABSOLUTELY NO DATA WILL SURVIVE A REBOOT.\n\n"
-    msgs[warn_apt_install]="\nInstalling dependencies:\n\napt : ${apt_deps_jessie} ${apt_deps_testing}\npip : ${pip_deps}\n\nYou will be asked to input a password for sudo."
+    msgs[warn_iptables]="\nApplying iptables rule:\n\niptables -I OUTPUT 2 -p tcp -s 127.0.0.1 -d 127.0.0.1 -m owner --uid-owner amnesia -j ACCEPT\n\n(needed for bitcoind rpc within the local host)\n"
+    msgs[warn_apt_install]="\nInstalling dependencies:\n\napt : ${apt_deps_jessie} ${apt_deps_testing}\npip : ${pip_deps}You will be asked to input a password for sudo."
 }
 
 
@@ -201,18 +202,31 @@ walletnotify=curl -sI --connect-timeout 1 http://127.0.0.1:62602/walletnotify?%s
 alertnotify=curl -sI --connect-timeout 1 http://127.0.0.1:62602/alertnotify?%s
 
 # Uncomment and fill in a persistent full path for the blockchain datadir
-#datadir="${core_home}/data"
+#datadir=${core_home}/data
 ENDCORECFG
 }
 
 install_deps()
 {
+    if [[ "${mode_full}" == "fullnode" ]]; then
+
+        echo -e "${msgs[warn_iptables]}"
+    fi
+
     check_deps && return
 
     echo -e "${msgs[warn_apt_install]}"
 
     sudo sh -c "apt-get update && apt-get install -y ${apt_deps_jessie} && apt-get install -y -t testing ${apt_deps_testing}; \
-                torify pip install -r ${jm_home}/requirements.txt && chmod -R ugo+rX /usr/local/lib/python2.7/dist-packages/"
+                if [[ $? == 0 ]]; then \
+                    torify pip install -r ${jm_home}/requirements.txt && chmod -R ugo+rX /usr/local/lib/python2.7/dist-packages/; \
+                fi \
+                if [[ ${mode_full} == 'fullnode' && $? == 0 ]]; then \
+                    iptables -I OUTPUT 2 -p tcp -s 127.0.0.1 -d 127.0.0.1 -m owner --uid-owner amnesia -j ACCEPT; \
+                fi \
+                if [[ $? != 0 ]]; then \
+                    echo '\n\nFAILED TO APPLY IPTABLES RULE FOR BITCOIND RPC\nSetup will continue, but full node functionality\n with Joinmarket will not work.'; \
+                fi"
     
     if ! check_deps; then
 
