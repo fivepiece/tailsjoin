@@ -11,7 +11,7 @@ tor_curl()
 set_global_vars()
 {
     export mode_persistent=
-    export mode_full="${1}"
+    export mode_full="${1:-blockrio}"
 
     export jm_release="v0.2.1"
     export jm_home=
